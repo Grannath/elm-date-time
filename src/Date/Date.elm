@@ -3,6 +3,8 @@ module Date.Date
         ( Date(..)
         , DateOps
         , WeekOps
+        , CompOps
+        , Period(..)
         , Weekday(..)
         , Gregorian
         , gregorian
@@ -16,6 +18,11 @@ module Date.Date
         , addMonths
         , addYears
         , isLeapYear
+        , period
+        , add
+        , daysBetween
+        , isBefore
+        , isAfter
         )
 
 {-| This module defines a Date type to represent a unique day in any calendar system.
@@ -28,11 +35,14 @@ applies to offsets.
 # Dates
 @docs Date, Weekday, day, month, year, daysInMonth, daysInYear, addDays, addMonths, addYears, isLeapYear
 
+# Comparisons
+@docs Period, period, add, daysBetween, isBefore, isAfter
+
 # Gregorian calendar
 @docs gregorian
 
 # Extension
-@docs DateOps, WeekOps, Gregorian, isoWeekOps
+@docs DateOps, WeekOps, CompOps, Gregorian, isoWeekOps
 -}
 
 import Date.Gregorian as GregorianDate
@@ -64,6 +74,7 @@ type alias DateOps data =
     , addMonths : Int -> data -> data
     , addYears : Int -> data -> data
     , weekOps : Maybe (WeekOps data)
+    , compOps : CompOps data
     , daysInMonth : data -> Int
     , daysInYear : data -> Int
     , isLeapYear : Maybe (data -> Bool)
@@ -82,6 +93,31 @@ type alias WeekOps data =
     , firstDayOfWeek : Weekday
     , minimalDaysInFirstWeek : Int
     }
+
+
+{-| CompOps contains all functions for comparisons between Dates.
+-}
+type alias CompOps data =
+    { period : data -> data -> Period
+    , add : Period -> data -> data
+    , daysBetween : data -> data -> Int
+    , isBefore : data -> data -> Bool
+    , isAfter : data -> data -> Bool
+    }
+
+
+{-| Period describes a length of time as found on a calendar.
+
+Keep in mind that without a reference a Period is ambigious. A Period of one
+month for example can have a different length in days, depending on the starting
+date. For absolute differences, use daysBetween.
+-}
+type Period
+    = Period
+        { days : Int
+        , months : Int
+        , years : Int
+        }
 
 
 {-| Data type used to represent the days of the week.
@@ -271,3 +307,62 @@ isLeapYear (Date { data, ops }) =
     ops.isLeapYear
         |> Maybe.map ((|>) data)
         |> Maybe.withDefault False
+
+
+split : Date a -> ( a, DateOps a )
+split (Date { data, ops }) =
+    ( data, ops )
+
+
+period : Date a -> Date a -> Period
+period date1 date2 =
+    let
+        ( data1, ops1 ) =
+            split date1
+
+        ( data2, ops2 ) =
+            split date2
+    in
+        ops1.compOps.period data1 data2
+
+
+daysBetween : Date a -> Date a -> Int
+daysBetween date1 date2 =
+    let
+        ( data1, ops1 ) =
+            split date1
+
+        ( data2, ops2 ) =
+            split date2
+    in
+        ops1.compOps.daysBetween data1 data2
+
+
+add : Period -> Date a -> Date a
+add period (Date { data, ops }) =
+    ops.compOps.add period data
+        |> asDate ops
+
+
+isBefore : Date a -> Date a -> Bool
+isBefore date1 date2 =
+    let
+        ( data1, ops1 ) =
+            split date1
+
+        ( data2, ops2 ) =
+            split date2
+    in
+        ops1.compOps.isBefore data1 data2
+
+
+isAfter : Date a -> Date a -> Bool
+isAfter date1 date2 =
+    let
+        ( data1, ops1 ) =
+            split date1
+
+        ( data2, ops2 ) =
+            split date2
+    in
+        ops1.compOps.isAfter data1 data2
