@@ -3,7 +3,7 @@ port module Main exposing (..)
 import Json.Encode exposing (Value)
 import Test exposing (Test, describe)
 import Test.Runner.Node exposing (TestProgram, run)
-import TestDate
+import TestGregorian
 
 
 main : TestProgram
@@ -14,7 +14,7 @@ main =
 all : Test
 all =
     describe "elm-utc"
-        [ TestDate.all ]
+        [ TestGregorian.all ]
 
 
 port emit : ( String, Value ) -> Cmd msg

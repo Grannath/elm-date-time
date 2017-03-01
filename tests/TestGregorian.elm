@@ -1,4 +1,4 @@
-module TestDate exposing (..)
+module TestGregorian exposing (..)
 
 import Expect exposing (Expectation)
 import Fuzz exposing (int, intRange)
