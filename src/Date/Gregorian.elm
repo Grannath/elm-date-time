@@ -10,6 +10,8 @@ module Date.Gregorian
         , addDays
         , isValidDate
         , isLeapYear
+        , daysInMonth
+        , daysInYear
         )
 
 
@@ -135,9 +137,14 @@ represent a valid date.
 -}
 isValidDate : Data -> Bool
 isValidDate { year, month, day } =
-    daysInMonth year month
-        |> Maybe.map (\days -> day >= 1 && day <= days)
-        |> Maybe.withDefault False
+    let
+        days =
+            unsafeDaysInMonth year month
+    in
+        if days < 0 then
+            False
+        else
+            day >= 1 && day <= days
 
 
 {-| isLeapYear returns True if the given year is a leap year.  The
@@ -152,18 +159,25 @@ isLeapYear y =
     y % 400 == 0 || y % 100 /= 0 && y % 4 == 0
 
 
+{-| daysInYear returns the number of days in the given year.
+-}
+daysInYear : Data -> Int
+daysInYear { year, month, day } =
+    if isLeapYear year then
+        366
+    else
+        365
+
+
 {-| daysInMonth returns the number of days in a month given a specific
 year, taking leap years into account.
 
 * A regular year has 365 days and the corresponding February has 28 days.
 * A leap year has 366 days and the corresponding February has 29 days.
 -}
-daysInMonth : Int -> Int -> Maybe Int
-daysInMonth y m =
-    if m >= 1 && m <= 12 then
-        Just <| unsafeDaysInMonth y m
-    else
-        Nothing
+daysInMonth : Data -> Int
+daysInMonth { year, month, day } =
+    unsafeDaysInMonth year month
 
 
 unsafeDaysInMonth : Int -> Int -> Int
@@ -195,11 +209,7 @@ unsafeDaysInMonth y m =
     else if m == 12 then
         31
     else
-        Debug.crash <|
-            "invalid call to unsafeDaysInMonth: year="
-                ++ toString y
-                ++ " month="
-                ++ toString m
+        -1
 
 
 firstValid : Data -> Data

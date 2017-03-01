@@ -10,6 +10,8 @@ module Date.Date
         , day
         , month
         , year
+        , daysInMonth
+        , daysInYear
         , addDays
         , addMonths
         , addYears
@@ -24,7 +26,7 @@ information, you can always resort to a pair or a ZonedDateTime. The same
 applies to offsets.
 
 # Dates
-@docs Date, Weekday, day, month, year, addDays, addMonths, addYears, isLeapYear
+@docs Date, Weekday, day, month, year, daysInMonth, daysInYear, addDays, addMonths, addYears, isLeapYear
 
 # Gregorian calendar
 @docs gregorian
@@ -62,7 +64,8 @@ type alias DateOps data =
     , addMonths : Int -> data -> data
     , addYears : Int -> data -> data
     , weekOps : Maybe (WeekOps data)
-    , isValid : data -> Bool
+    , daysInMonth : data -> Int
+    , daysInYear : data -> Int
     , isLeapYear : Maybe (data -> Bool)
     , toGregorian : data -> Date Gregorian
     }
@@ -149,8 +152,9 @@ gregorianOps =
     , addDays = wrapArgs GregorianDate.addDays
     , addMonths = wrapArgs GregorianDate.addMonths
     , addYears = wrapArgs GregorianDate.addYears
-    , isValid = wrap GregorianDate.isValidDate
     , isLeapYear = Just (wrap (GregorianDate.isLeapYear << GregorianDate.year))
+    , daysInMonth = wrap GregorianDate.daysInMonth
+    , daysInYear = wrap GregorianDate.daysInYear
     , weekOps = Just isoWeekOps
     , toGregorian = (\d -> Date { data = d, ops = gregorianOps })
     }
@@ -188,6 +192,7 @@ weekday (Gregorian data) =
         else
             Sat
 
+
 {-| day returns the day as defined by the calendar in use.
 -}
 day : Date a -> Int
@@ -207,6 +212,20 @@ month (Date { data, ops }) =
 year : Date a -> Int
 year (Date { data, ops }) =
     ops.year data
+
+
+{-| daysInMonth returns the number of days in the given month.
+-}
+daysInMonth : Date a -> Int
+daysInMonth (Date { data, ops }) =
+    ops.daysInMonth data
+
+
+{-| daysInYear returns the number of days in the given year.
+-}
+daysInYear : Date a -> Int
+daysInYear (Date { data, ops }) =
+    ops.daysInYear data
 
 
 asDate : DateOps a -> a -> Date a
