@@ -1,9 +1,127 @@
 module TestGregorian exposing (..)
 
 import Expect exposing (Expectation)
-import Fuzz exposing (int, intRange)
+import Fuzz exposing (int, intRange, Fuzzer)
 import Test exposing (..)
 import Date.Date exposing (..)
+
+
+all : Test
+all =
+    describe "Gregorian dates"
+        [ constructing
+        , leapYears
+        , adders
+        ]
+
+
+constructing : Test
+constructing =
+    describe "Date.Date.gregorian"
+        [ fuzz yearMonthDayFuzzer "constructs dates from valid input" <|
+            \( year, month, day ) ->
+                datesEqual (date year month day) ( year, month, day )
+        , describe "fails on invalid input"
+            [ fuzz yearMonthDayFuzzer "does not allow months larger than 12" <|
+                \( year, month, day ) ->
+                    fails
+                        ("Returned Date from invalid input "
+                            ++ (print year month day)
+                            ++ "."
+                        )
+                        (gregorian year (month + 12) day)
+            , fuzz yearMonthDayFuzzer "does not allow days larger than the months maximum" <|
+                \( year, month, day ) ->
+                    fails
+                        ("Returned Date from invalid input "
+                            ++ (print year month day)
+                            ++ "."
+                        )
+                        (gregorian year month (day + 31))
+            ]
+        ]
+
+
+leapYears : Test
+leapYears =
+    describe "leap years"
+        [ describe "Date.Date.gregorian"
+            [ fuzz (intRange -400 2020) "distinguishes between leap years" <|
+                \year ->
+                    if List.member year validLeapYears then
+                        works
+                            "Failed for 29. February on a leap year."
+                            (gregorian year 2 29)
+                    else
+                        fails
+                            "Worked for 29. February on a non-leap year."
+                            (gregorian year 2 29)
+            ]
+        , describe "Date.Date.isLeapYear"
+            [ fuzz (intRange -400 2020) "is correct given any year" <|
+                \year ->
+                    if List.member year validLeapYears then
+                        Expect.true
+                            ("Expected " ++ toString year ++ " to be a leap year")
+                            (isLeapYear (date year 1 1))
+                    else
+                        Expect.false
+                            (toString year ++ " is not a leap year")
+                            (isLeapYear (date year 1 1))
+            ]
+        , describe "Date.Date.daysInMonth"
+            [ fuzz2 (intRange -400 2020) (intRange 1 12) "is correct given any year, month pair" <|
+                \year month ->
+                    daysInMonth (date year month 1)
+                        |> Expect.equal (monthDays year month)
+            ]
+        ]
+
+
+adders : Test
+adders =
+    describe "Time.Date.add{Years,Months,Days}"
+        [ fuzz2 (intRange -1000 1000) dateFuzzer "addYears is relative" <|
+            \years date1 ->
+                let
+                    date2 =
+                        addYears years date1
+                in
+                    Expect.equal years ((year date2) - (year date1))
+        , fuzz2 (intRange -1000 1000) dateFuzzer "addMonths is relative" <|
+            \months date1 ->
+                let
+                    date2 =
+                        addMonths months date1
+
+                    dY =
+                        ((year date2) - (year date1))
+
+                    dM =
+                        ((month date2) - (month date1))
+                in
+                    Expect.equal months (dY * 12 + dM)
+        , fuzz2 (intRange -1000 1000) dateFuzzer "addDays is reversible" <|
+            \days date1 ->
+                let
+                    date2 =
+                        addDays days date1
+                in
+                    Expect.equal date1 (addDays -days date2)
+        ]
+
+
+
+-- Test utils and data
+
+
+print : Int -> Int -> Int -> String
+print year month day =
+    (toString year)
+        ++ "-"
+        ++ (toString month)
+        ++ "-"
+        ++ (toString day)
 
 
 someDate : Date Gregorian
@@ -78,120 +196,46 @@ fuzzDate =
     fuzz3 int (intRange 1 12) (intRange 1 31)
 
 
+yearMonthDayFuzzer : Fuzzer ( Int, Int, Int )
+yearMonthDayFuzzer =
+    Fuzz.tuple3 ( int, (intRange 1 12), (intRange 1 31) )
+        |> Fuzz.map
+            (\( year, month, day ) ->
+                ( year, month, clamp 1 day (monthDays year month) )
+            )
+
+
+dateFuzzer : Fuzzer (Date Gregorian)
+dateFuzzer =
+    let
+        tupleToDate =
+            \( year, month, day ) ->
+                date year month day
+    in
+        Fuzz.map tupleToDate yearMonthDayFuzzer
+
+
 date : Int -> Int -> Int -> Date Gregorian
 date year month day =
-    let
-        month_ =
-            if month > 12 then
-                12
-            else if month < 1 then
-                1
-            else
-                month
-
-        maxDay =
-            monthDays year month_
-
-        day_ =
-            if day > maxDay then
-                maxDay
-            else if day < 1 then
-                1
-            else
-                day
-    in
-        gregorian year month_ day_
-            |> Result.withDefault (Debug.crash "Invalid test date!")
+    gregorian year month day
+        |> Result.withDefault (Debug.crash "Invalid test date!")
 
 
-constructing : Test
-constructing =
-    describe "Time.Date.date"
-        [ fuzzDate "constructs dates" <|
-            \year month day ->
-                let
-                    day_ =
-                        clamp 1 day (monthDays year month)
-                in
-                    datesEqual (date year month day_) ( year, month, day_ )
-        , test "constructs valid dates" <|
-            always <|
-                datesEqual (date 1992 5 29) ( 1992, 5, 29 )
-        , test "accounts for leap years" <|
-            always <|
-                datesEqual (date 1992 2 29) ( 1992, 2, 29 )
-        , test "clamps invalid dates" <|
-            always <|
-                datesEqual (date 1993 2 29) ( 1993, 2, 28 )
-        ]
+works : String -> Result a b -> Expectation
+works mes res =
+    case res of
+        Ok _ ->
+            Expect.pass
+
+        Err _ ->
+            Expect.fail mes
 
 
-leapYears : Test
-leapYears =
-    describe "Time.Date.isLeapYear"
-        [ describe "isLeapYear"
-            [ fuzz (intRange -400 2020) "is correct given any year" <|
-                \year ->
-                    if List.member year validLeapYears then
-                        Expect.true
-                            ("Expected " ++ toString year ++ " to be a leap year")
-                            (isLeapYear (date year 1 1))
-                    else
-                        Expect.false
-                            (toString year ++ " is not a leap year")
-                            (isLeapYear (date year 1 1))
-            ]
-        , describe "daysInMonth"
-            [ fuzz2 (intRange -400 2020) (intRange 1 12) "is correct given any year, month pair" <|
-                \year month ->
-                    daysInMonth (date year month 1)
-                        |> Expect.equal (monthDays year month)
-            ]
-        ]
+fails : String -> Result a b -> Expectation
+fails mes res =
+    case res of
+        Ok _ ->
+            Expect.fail mes
 
-
-adders : Test
-adders =
-    describe "Time.Date.add{Years,Months,Days}"
-        [ test "addYears is relative" <|
-            \() ->
-                let
-                    date1 =
-                        date 1992 2 29
-                            |> addYears 1
-
-                    date2 =
-                        date 1993 2 28
-                in
-                    Expect.equal date1 date2
-        , test "addMonths is relative" <|
-            \() ->
-                let
-                    date1 =
-                        date 1992 1 31
-                            |> addMonths 1
-
-                    date2 =
-                        date 1992 2 29
-                in
-                    Expect.equal date1 date2
-        , fuzz int "addDays is reversible" <|
-            \days ->
-                let
-                    date1 =
-                        someDate
-
-                    date2 =
-                        addDays days date1
-                in
-                    Expect.equal date1 (addDays -days date2)
-        ]
-
-
-all : Test
-all =
-    describe "Time.Date"
-        [ constructing
-        , leapYears
-        , adders
-        ]
+        Err _ ->
+            Expect.pass
