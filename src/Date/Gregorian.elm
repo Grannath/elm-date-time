@@ -12,6 +12,11 @@ module Date.Gregorian
         , isLeapYear
         , daysInMonth
         , daysInYear
+        , period
+        , addPeriod
+        , daysBetween
+        , isBefore
+        , isAfter
         )
 
 
@@ -350,3 +355,53 @@ dateFromDays ds =
         , month = month
         , day = day
         }
+
+
+{-| period returns the relative number of years, months and days between two
+Dates, in this order.
+-}
+period : Data -> Data -> ( Int, Int, Int )
+period data1 data2 =
+    ( data1.year - data2.year
+    , (abs data1.year * 12 + data1.month) - (abs data2.year * 12 + data2.month)
+    , daysFromYearMonthDay data1
+        - daysFromYearMonthDay data2
+    )
+
+
+{-| addPeriod adds the number of years, months and days to the date.
+-}
+addPeriod : ( Int, Int, Int ) -> Data -> Data
+addPeriod ( years, months, days ) =
+    addDays days
+        >> addMonths months
+        >> addYears years
+
+
+daysBetween : Data -> Data -> Int
+daysBetween data1 data2 =
+    daysFromYearMonthDay data1 - daysFromYearMonthDay data2
+
+
+isBefore : Data -> Data -> Bool
+isBefore data1 data2 =
+    if data1.year < data2.year then
+        True
+    else if data1.year == data2.year && data1.month < data2.month then
+        True
+    else if data1.year == data2.year && data1.month == data2.month && data1.day < data2.day then
+        True
+    else
+        False
+
+
+isAfter : Data -> Data -> Bool
+isAfter data1 data2 =
+    if data1.year > data2.year then
+        True
+    else if data1.year == data2.year && data1.month > data2.month then
+        True
+    else if data1.year == data2.year && data1.month == data2.month && data1.day > data2.day then
+        True
+    else
+        False

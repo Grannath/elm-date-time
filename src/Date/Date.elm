@@ -132,6 +132,10 @@ type Weekday
     | Sun
 
 
+
+-- Gregorian calendar
+
+
 {-| Gregorian represents a day in the proleptic gregorian calendar.
 -}
 type Gregorian
@@ -163,36 +167,62 @@ gregorian year month day =
                 )
 
 
-wrap : (GregorianDate.Data -> a) -> Gregorian -> a
-wrap f =
+wrapArg : (GregorianDate.Data -> a) -> Gregorian -> a
+wrapArg f =
     (\(Gregorian d) ->
         f d
     )
 
 
-wrapArgs :
-    (a -> GregorianDate.Data -> GregorianDate.Data)
+wrapArgs2 :
+    (a -> GregorianDate.Data -> b)
     -> a
     -> Gregorian
+    -> b
+wrapArgs2 func =
+    (\d -> wrapArg (func d))
+
+
+wrapArgs1 :
+    (GregorianDate.Data -> a -> b)
     -> Gregorian
-wrapArgs func =
-    (\d -> wrap (func d))
-        >> (\f -> Gregorian << f)
+    -> a
+    -> b
+wrapArgs1 func =
+    (\d x -> wrapArg (flip func x) d)
+
+
+(<<<) : (c -> d) -> (a -> b -> c) -> a -> b -> d
+(<<<) f2 f1 =
+    (\x y ->
+        f1 x y |> f2
+    )
 
 
 gregorianOps : DateOps Gregorian
 gregorianOps =
-    { day = wrap GregorianDate.day
-    , month = wrap GregorianDate.month
-    , year = wrap GregorianDate.year
-    , addDays = wrapArgs GregorianDate.addDays
-    , addMonths = wrapArgs GregorianDate.addMonths
-    , addYears = wrapArgs GregorianDate.addYears
-    , isLeapYear = Just (wrap (GregorianDate.isLeapYear << GregorianDate.year))
-    , daysInMonth = wrap GregorianDate.daysInMonth
-    , daysInYear = wrap GregorianDate.daysInYear
+    { day = wrapArg GregorianDate.day
+    , month = wrapArg GregorianDate.month
+    , year = wrapArg GregorianDate.year
+    , addDays = Gregorian <<< wrapArgs2 GregorianDate.addDays
+    , addMonths = Gregorian <<< wrapArgs2 GregorianDate.addMonths
+    , addYears = Gregorian <<< wrapArgs2 GregorianDate.addYears
+    , isLeapYear = Just (wrapArg (GregorianDate.isLeapYear << GregorianDate.year))
+    , daysInMonth = wrapArg GregorianDate.daysInMonth
+    , daysInYear = wrapArg GregorianDate.daysInYear
     , weekOps = Just isoWeekOps
+    , compOps = gregorianCompOps
     , toGregorian = (\d -> Date { data = d, ops = gregorianOps })
+    }
+
+
+gregorianCompOps : CompOps Gregorian
+gregorianCompOps =
+    { period = gregorianPeriod
+    , add = gregorianAddPeriod
+    , daysBetween = wrapArgs1 <| wrapArgs2 GregorianDate.daysBetween
+    , isBefore = wrapArgs1 <| wrapArgs2 GregorianDate.isBefore
+    , isAfter = wrapArgs1 <| wrapArgs2 GregorianDate.isAfter
     }
 
 
@@ -227,6 +257,34 @@ weekday (Gregorian data) =
             Fri
         else
             Sat
+
+
+gregorianPeriod : Gregorian -> Gregorian -> Period
+gregorianPeriod (Gregorian data1) (Gregorian data2) =
+    let
+        ( years, months, days ) =
+            GregorianDate.period data1 data2
+    in
+        Period
+            { years = years
+            , months = months
+            , days = days
+            }
+
+
+gregorianAddPeriod : Period -> Gregorian -> Gregorian
+gregorianAddPeriod (Period { days, months, years }) (Gregorian data) =
+    GregorianDate.addPeriod ( years, months, days ) data
+        |> Gregorian
+
+
+
+-- General methods
+
+
+split : Date a -> ( a, DateOps a )
+split (Date { data, ops }) =
+    ( data, ops )
 
 
 {-| day returns the day as defined by the calendar in use.
@@ -309,11 +367,8 @@ isLeapYear (Date { data, ops }) =
         |> Maybe.withDefault False
 
 
-split : Date a -> ( a, DateOps a )
-split (Date { data, ops }) =
-    ( data, ops )
-
-
+{-| period returns the relative time between Dates.
+-}
 period : Date a -> Date a -> Period
 period date1 date2 =
     let
@@ -326,6 +381,8 @@ period date1 date2 =
         ops1.compOps.period data1 data2
 
 
+{-| daysBetween returns the absolute difference between two Dates.
+-}
 daysBetween : Date a -> Date a -> Int
 daysBetween date1 date2 =
     let
@@ -338,12 +395,17 @@ daysBetween date1 date2 =
         ops1.compOps.daysBetween data1 data2
 
 
+{-| add adds the days, months and years described by the Period to the given
+Date.
+-}
 add : Period -> Date a -> Date a
 add period (Date { data, ops }) =
     ops.compOps.add period data
         |> asDate ops
 
 
+{-| isBefore returns True if the first Date comes before the second.
+-}
 isBefore : Date a -> Date a -> Bool
 isBefore date1 date2 =
     let
@@ -356,6 +418,8 @@ isBefore date1 date2 =
         ops1.compOps.isBefore data1 data2
 
 
+{-| isAfter returns True if the first Date comes after the second.
+-}
 isAfter : Date a -> Date a -> Bool
 isAfter date1 date2 =
     let
