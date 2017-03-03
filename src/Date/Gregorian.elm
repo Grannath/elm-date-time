@@ -4,6 +4,7 @@ module Date.Gregorian
         , year
         , month
         , day
+        , dayOfYear
         , weekday
         , addYears
         , addMonths
@@ -48,6 +49,11 @@ the Date's (year, month) pair and in the range [1, 31].
 day : Data -> Int
 day =
     .day
+
+
+dayOfYear : Data -> Int
+dayOfYear { year, month, day } =
+    (daysFromYearMonth year month) + day
 
 
 {-| weekday returns the day of week for a given Date.
@@ -109,21 +115,27 @@ semantics are the same as `addYears`.
 -}
 addMonths : Int -> Data -> Data
 addMonths months { year, month, day } =
-    let
-        sign =
-            if year < 0 then
-                -1
-            else
-                1
+    if months == 0 then
+        { year = year
+        , month = month
+        , day = day
+        }
+    else
+        let
+            ms =
+                year * 12 + month - 1 + months
 
-        ms =
-            abs year * 12 + month - 1 + months
-    in
-        firstValid
-            { year = (sign * ms // 12)
-            , month = ((ms % 12) + 1)
-            , day = day
-            }
+            yo =
+                if ms < 0 then
+                    -1
+                else
+                    0
+        in
+            firstValid
+                { year = ((ms - yo) // 12) + yo
+                , month = (ms % 12) + 1
+                , day = day
+                }
 
 
 {-| days adds an exact number (positive or negative) of days to a
@@ -362,25 +374,49 @@ Dates, in this order.
 -}
 period : Data -> Data -> ( Int, Int, Int )
 period data1 data2 =
-    ( data1.year - data2.year
-    , (abs data1.year * 12 + data1.month) - (abs data2.year * 12 + data2.month)
-    , daysFromYearMonthDay data1
-        - daysFromYearMonthDay data2
-    )
+    let
+        dy =
+            data2.year - data1.year
+
+        years =
+            if isAfter (addYears dy data1) data2 then
+                dy - 1
+            else
+                dy
+
+        cy =
+            addYears years data1
+
+        dm =
+            (data2.month - cy.month) % 12
+
+        months =
+            if isAfter (addMonths dm cy) data2 then
+                dm - 1
+            else
+                dm
+
+        days =
+            daysBetween (addMonths months cy) data2
+    in
+        ( years
+        , months
+        , days
+        )
 
 
 {-| addPeriod adds the number of years, months and days to the date.
 -}
 addPeriod : ( Int, Int, Int ) -> Data -> Data
 addPeriod ( years, months, days ) =
-    addDays days
+    addYears years
         >> addMonths months
-        >> addYears years
+        >> addDays days
 
 
 daysBetween : Data -> Data -> Int
 daysBetween data1 data2 =
-    daysFromYearMonthDay data1 - daysFromYearMonthDay data2
+    daysFromYearMonthDay data2 - daysFromYearMonthDay data1
 
 
 isBefore : Data -> Data -> Bool

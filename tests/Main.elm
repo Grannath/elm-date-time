@@ -13,7 +13,7 @@ main =
 
 all : Test
 all =
-    describe "elm-utc"
+    describe "Date.Date"
         [ TestGregorian.all ]
 
 

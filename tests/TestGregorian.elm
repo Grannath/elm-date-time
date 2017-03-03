@@ -12,6 +12,9 @@ all =
         [ constructing
         , leapYears
         , adders
+        , lengths
+        , weeks
+        , comparisons
         ]
 
 
@@ -69,18 +72,12 @@ leapYears =
                             (toString year ++ " is not a leap year")
                             (isLeapYear (date year 1 1))
             ]
-        , describe "Date.Date.daysInMonth"
-            [ fuzz2 (intRange -400 2020) (intRange 1 12) "is correct given any year, month pair" <|
-                \year month ->
-                    daysInMonth (date year month 1)
-                        |> Expect.equal (monthDays year month)
-            ]
         ]
 
 
 adders : Test
 adders =
-    describe "Time.Date.add{Years,Months,Days}"
+    describe "Date.Date.add{Years,Months,Days}"
         [ fuzz2 (intRange -1000 1000) dateFuzzer "addYears is relative" <|
             \years date1 ->
                 let
@@ -111,8 +108,234 @@ adders =
         ]
 
 
+lengths : Test
+lengths =
+    describe "Date.Date.daysIn{Month,Year}"
+        [ describe "Date.Date.daysInMonth"
+            [ fuzz2 (intRange -400 2020) (intRange 1 12) "is correct given any year, month pair" <|
+                \year month ->
+                    daysInMonth (date year month 1)
+                        |> Expect.equal (monthDays year month)
+            ]
+        , describe "Date.Date.daysInYear"
+            [ fuzz (intRange -400 2020) "is correct given any year" <|
+                \year ->
+                    let
+                        days =
+                            if List.member year validLeapYears then
+                                366
+                            else
+                                365
+                    in
+                        daysInYear (date year 1 1)
+                            |> Expect.equal days
+            ]
+        ]
+
+
+yearDay : Test
+yearDay =
+    describe "Date.Date.dayOfYear"
+        [ fuzz2 (intRange -400 2020) (intRange 1 365) "works for every year" <|
+            \year day ->
+                let
+                    date1 =
+                        date year 1 1
+
+                    date2 =
+                        addDays (day - 1) date1
+                in
+                    Expect.equal day (dayOfYear date2)
+        ]
+
+
+weekData : List ( Date Gregorian, Weekday, Int, Int, Int )
+weekData =
+    [ ( date 1969 12 29, Mon, 53, 1, 1970 )
+    , ( date 2008 12 31, Wed, 53, 1, 2009 )
+    , ( date 2009 1 1, Thu, 1, 1, 2009 )
+    , ( date 2009 1 2, Fri, 1, 1, 2009 )
+    , ( date 2009 1 5, Mon, 2, 2, 2009 )
+    , ( date 2009 12 31, Thu, 53, 53, 2009 )
+    , ( date 2010 1 1, Fri, 0, 53, 2009 )
+    , ( date 2010 1 2, Sat, 0, 53, 2009 )
+    , ( date 2010 1 4, Mon, 1, 1, 2010 )
+    , ( date 2010 12 31, Fri, 52, 52, 2010 )
+    , ( date 2011 1 1, Sat, 0, 52, 2010 )
+    , ( date 2011 1 2, Sun, 0, 52, 2010 )
+    , ( date 2011 1 3, Mon, 1, 1, 2011 )
+    , ( date 2012 12 23, Sun, 51, 51, 2012 )
+    , ( date 2012 12 24, Mon, 52, 52, 2012 )
+    , ( date 2012 12 27, Thu, 52, 52, 2012 )
+    , ( date 2012 12 28, Fri, 52, 52, 2012 )
+    , ( date 2012 12 29, Sat, 52, 52, 2012 )
+    , ( date 2012 12 30, Sun, 52, 52, 2012 )
+    , ( date 2012 12 31, Mon, 53, 1, 2013 )
+    , ( date 2013 1 1, Tue, 1, 1, 2013 )
+    , ( date 2013 1 2, Wed, 1, 1, 2013 )
+    , ( date 2013 1 6, Sun, 1, 1, 2013 )
+    , ( date 2013 1 7, Mon, 2, 2, 2013 )
+    ]
+
+
+weeks : Test
+weeks =
+    describe "calendar weeks"
+        [ testAll weekData "Date.Date.dayOfWeek returns the correct Weekday" <|
+            \( date, day, _, _, _ ) ->
+                Expect.true
+                    ("Date "
+                        ++ (printDate date)
+                        ++ " should have day "
+                        ++ (toString day)
+                        ++ ", but has "
+                        ++ (toString <| dayOfWeek date)
+                    )
+                    (Just day == dayOfWeek date)
+        , testAll weekData "Date.Date.weekOfWeekBasedYear returns the correct week" <|
+            \( date, _, _, week, _ ) ->
+                Expect.true
+                    ("Date "
+                        ++ (printDate date)
+                        ++ " should have weekOfWeekBasedYear "
+                        ++ (toString week)
+                        ++ ", but has "
+                        ++ (toString <| weekOfWeekBasedYear date)
+                    )
+                    (Just week == weekOfWeekBasedYear date)
+        , testAll weekData "Date.Date.weekBasedYear returns the correct year" <|
+            \( date, _, _, _, year ) ->
+                Expect.true
+                    ("Date "
+                        ++ (printDate date)
+                        ++ " should have weekBasedYear "
+                        ++ (toString year)
+                        ++ ", but has "
+                        ++ (toString <| weekBasedYear date)
+                    )
+                    (Just year == weekBasedYear date)
+        , testAll weekData "Date.Date.weekOfYear returns the correct week" <|
+            \( date, _, week, _, _ ) ->
+                Expect.true
+                    ("Date "
+                        ++ (printDate date)
+                        ++ " should have weekOfYear "
+                        ++ (toString week)
+                        ++ ", but has "
+                        ++ (toString <| weekOfYear date)
+                    )
+                    (Just week == weekOfYear date)
+        ]
+
+
+comparisons : Test
+comparisons =
+    describe "date comparisons"
+        [ describe "Date.Date.isBefore"
+            [ fuzz2 (intRange -1000 1000) dateFuzzer "works with any two dates" <|
+                \days date ->
+                    let
+                        date2 =
+                            addDays days date
+                    in
+                        if days > 0 then
+                            Expect.true
+                                ("Date "
+                                    ++ (printDate date)
+                                    ++ " should be before a date "
+                                    ++ (toString days)
+                                    ++ " days later, but it is not."
+                                )
+                                (isBefore date date2)
+                        else
+                            Expect.false
+                                ("Date "
+                                    ++ (printDate date)
+                                    ++ " should not be before a date "
+                                    ++ (toString days)
+                                    ++ " days later, but it is."
+                                )
+                                (isBefore date date2)
+            ]
+        , describe "Date.Date.isAfter"
+            [ fuzz2 (intRange -1000 1000) dateFuzzer "works with any two dates" <|
+                \days date ->
+                    let
+                        date2 =
+                            addDays days date
+                    in
+                        if days < 0 then
+                            Expect.true
+                                ("Date "
+                                    ++ (printDate date)
+                                    ++ " should be after a date "
+                                    ++ (toString -days)
+                                    ++ " days before, but it is not."
+                                )
+                                (isAfter date date2)
+                        else
+                            Expect.false
+                                ("Date "
+                                    ++ (printDate date)
+                                    ++ " should not be after a date "
+                                    ++ (toString -days)
+                                    ++ " days before, but it is."
+                                )
+                                (isAfter date date2)
+            ]
+        , describe "Date.Date.daysBetween"
+            [ fuzz2 (intRange -1000 1000) dateFuzzer "works with any two dates" <|
+                \days date ->
+                    let
+                        date2 =
+                            addDays days date
+                    in
+                        Expect.true
+                            ("Date "
+                                ++ (printDate date)
+                                ++ " and date "
+                                ++ (printDate date2)
+                                ++ " should be "
+                                ++ (toString days)
+                                ++ " days apart, but daysBetween gives "
+                                ++ (toString <| daysBetween date date2)
+                                ++ " days."
+                            )
+                            (daysBetween date date2 == days)
+            ]
+        , describe "Date.Date.period and add are inverse"
+            [ fuzz2 (intRange -1000 1000) dateFuzzer "works with any two dates" <|
+                \days date ->
+                    let
+                        date2 =
+                            addDays days date
+
+                        prd =
+                            period date date2
+                    in
+                        Expect.true
+                            ("Date "
+                                ++ (printDate date)
+                                ++ " and date "
+                                ++ (printDate date2)
+                                ++ " result in a period of "
+                                ++ (toString prd)
+                                ++ ", which added to the first date results in "
+                                ++ (printDate <| add prd date)
+                                ++ "."
+                            )
+                            (add prd date == date2)
+            ]
+        ]
+
+
 
 -- Test utils and data
+
+
+printDate : Date a -> String
+printDate date =
+    print (year date) (month date) (day date)
 
 
 print : Int -> Int -> Int -> String
@@ -122,12 +345,6 @@ print year month day =
         ++ (toString month)
         ++ "-"
         ++ (toString day)
-
-
-someDate : Date Gregorian
-someDate =
-    gregorian 1992 5 29
-        |> Result.withDefault (Debug.crash "Invalid test date!")
 
 
 toTuple : Date a -> ( Int, Int, Int )
@@ -196,12 +413,18 @@ fuzzDate =
     fuzz3 int (intRange 1 12) (intRange 1 31)
 
 
+testAll : List a -> String -> (a -> Expectation) -> Test
+testAll list mes exp =
+    Test.concat <|
+        List.map (test mes << always << exp) list
+
+
 yearMonthDayFuzzer : Fuzzer ( Int, Int, Int )
 yearMonthDayFuzzer =
-    Fuzz.tuple3 ( int, (intRange 1 12), (intRange 1 31) )
+    Fuzz.tuple3 ( (intRange -400 4000), (intRange 1 12), (intRange 1 31) )
         |> Fuzz.map
             (\( year, month, day ) ->
-                ( year, month, clamp 1 day (monthDays year month) )
+                ( year, month, clamp 1 (monthDays year month) day )
             )
 
 
@@ -217,8 +440,16 @@ dateFuzzer =
 
 date : Int -> Int -> Int -> Date Gregorian
 date year month day =
-    gregorian year month day
-        |> Result.withDefault (Debug.crash "Invalid test date!")
+    let
+        date =
+            gregorian year month day
+    in
+        case date of
+            Ok dt ->
+                dt
+
+            Err msg ->
+                Debug.crash msg
 
 
 works : String -> Result a b -> Expectation

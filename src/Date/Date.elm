@@ -12,6 +12,7 @@ module Date.Date
         , day
         , month
         , year
+        , dayOfYear
         , daysInMonth
         , daysInYear
         , addDays
@@ -23,6 +24,10 @@ module Date.Date
         , daysBetween
         , isBefore
         , isAfter
+        , dayOfWeek
+        , weekOfYear
+        , weekOfWeekBasedYear
+        , weekBasedYear
         )
 
 {-| This module defines a Date type to represent a unique day in any calendar system.
@@ -33,7 +38,10 @@ information, you can always resort to a pair or a ZonedDateTime. The same
 applies to offsets.
 
 # Dates
-@docs Date, Weekday, day, month, year, daysInMonth, daysInYear, addDays, addMonths, addYears, isLeapYear
+@docs Date, Weekday, day, month, year, dayOfYear, daysInMonth, daysInYear, addDays, addMonths, addYears, isLeapYear
+
+# Weeks
+@docs dayOfWeek, weekOfYear, weekOfWeekBasedYear, weekBasedYear
 
 # Comparisons
 @docs Period, period, add, daysBetween, isBefore, isAfter
@@ -70,6 +78,7 @@ type alias DateOps data =
     { day : data -> Int
     , month : data -> Int
     , year : data -> Int
+    , dayOfYear : data -> Int
     , addDays : Int -> data -> data
     , addMonths : Int -> data -> data
     , addYears : Int -> data -> data
@@ -111,6 +120,11 @@ type alias CompOps data =
 Keep in mind that without a reference a Period is ambigious. A Period of one
 month for example can have a different length in days, depending on the starting
 date. For absolute differences, use daysBetween.
+
+As an example, consider 2000-01-31 and 2000-02-29. Both are the last day of
+their respective month, so the period from the first to the second will be
+counted as one month. However, the period from the second to the first will be
+29 days, as one month would lead to 2000-01-29.
 -}
 type Period
     = Period
@@ -204,6 +218,7 @@ gregorianOps =
     { day = wrapArg GregorianDate.day
     , month = wrapArg GregorianDate.month
     , year = wrapArg GregorianDate.year
+    , dayOfYear = wrapArg GregorianDate.dayOfYear
     , addDays = Gregorian <<< wrapArgs2 GregorianDate.addDays
     , addMonths = Gregorian <<< wrapArgs2 GregorianDate.addMonths
     , addYears = Gregorian <<< wrapArgs2 GregorianDate.addYears
@@ -308,6 +323,14 @@ year (Date { data, ops }) =
     ops.year data
 
 
+{-| dayOfYear returns the number of the day, counting from the beginning of the
+current year.
+-}
+dayOfYear : Date a -> Int
+dayOfYear (Date { data, ops }) =
+    ops.dayOfYear data
+
+
 {-| daysInMonth returns the number of days in the given month.
 -}
 daysInMonth : Date a -> Int
@@ -368,6 +391,11 @@ isLeapYear (Date { data, ops }) =
 
 
 {-| period returns the relative time between Dates.
+
+Please note that
+    period date1 date2 \= -(period date2 date1)
+but
+    add (period date1 date2) date1 == date2
 -}
 period : Date a -> Date a -> Period
 period date1 date2 =
@@ -430,3 +458,151 @@ isAfter date1 date2 =
             split date2
     in
         ops1.compOps.isAfter data1 data2
+
+
+{-| dayOfWeek returns the Weekday if the calendar system in use supports this
+operation.
+-}
+dayOfWeek : Date a -> Maybe Weekday
+dayOfWeek (Date { data, ops }) =
+    case ops.weekOps of
+        Just wOps ->
+            Just (wOps.dayOfWeek data)
+
+        Nothing ->
+            Nothing
+
+
+startOfWeekOffset : DateOps a -> WeekOps a -> a -> Int
+startOfWeekOffset ops wOps data =
+    let
+        dayNumber day =
+            case day of
+                Mon ->
+                    1
+
+                Tue ->
+                    2
+
+                Wed ->
+                    3
+
+                Thu ->
+                    4
+
+                Fri ->
+                    5
+
+                Sat ->
+                    6
+
+                Sun ->
+                    7
+
+        ldn wOps =
+            (((dayNumber <| wOps.dayOfWeek data) - (dayNumber <| wOps.firstDayOfWeek)) % 7) + 1
+
+        doy =
+            ops.dayOfYear data
+
+        n =
+            (doy - (ldn wOps)) % 7
+    in
+        if n + 1 > wOps.minimalDaysInFirstWeek then
+            7 - n
+        else
+            -n
+
+
+week : DateOps a -> WeekOps a -> a -> Int
+week ops wOps data =
+    let
+        doy =
+            ops.dayOfYear data
+    in
+        (6 + (startOfWeekOffset ops wOps data) + doy) // 7
+
+
+{-| weekOfYear returns the number of the week as defined by the calendar system.
+
+This starts on the first week of the year that has a certain minimal number of
+days. Days in the overlapping week are counted as in week 52/53 or 0, depending
+on the calendar year.
+-}
+weekOfYear : Date a -> Maybe Int
+weekOfYear (Date { data, ops }) =
+    case ops.weekOps of
+        Just wOps ->
+            Just (week ops wOps data)
+
+        Nothing ->
+            Nothing
+
+
+{-| weekOfWeekBasedYear gives the week number based on a year that only has whole weeks.
+
+In this system, every week belongs to exactly one year, and therefore no week 0
+exists.
+-}
+weekOfWeekBasedYear : Date a -> Maybe Int
+weekOfWeekBasedYear (Date { data, ops }) =
+    let
+        doy =
+            ops.dayOfYear data
+
+        lastWeek wOps =
+            (6 + (startOfWeekOffset ops wOps data) + (ops.daysInYear data) + wOps.minimalDaysInFirstWeek) // 7
+
+        woy wOps =
+            week ops wOps data
+    in
+        case ops.weekOps of
+            Just wOps ->
+                if woy wOps >= lastWeek wOps then
+                    Just ((woy wOps) - (lastWeek wOps) + 1)
+                else if woy wOps > 0 then
+                    Just (woy wOps)
+                else
+                    weekOfWeekBasedYear <|
+                        asDate ops (ops.addDays (-doy - 1) data)
+
+            Nothing ->
+                Nothing
+
+
+{-| weekBasedYear gives the year as determined when arranging years by whole
+weeks.
+
+While mostly the same as the calendar year, this will differ around new years.
+Use this with weekOfWeekBasedYear. If a week 0 is acceptable or expected, use
+weekOfYear and year.
+-}
+weekBasedYear : Date a -> Maybe Int
+weekBasedYear (Date { data, ops }) =
+    let
+        yr =
+            ops.year data
+
+        doy =
+            ops.dayOfYear data
+
+        lastWeek wOps =
+            (6 + (startOfWeekOffset ops wOps data) + (ops.daysInYear data) + wOps.minimalDaysInFirstWeek) // 7
+
+        woy wOps =
+            week ops wOps data
+
+        calcYear wOps =
+            if woy wOps == 0 then
+                yr - 1
+            else if woy wOps >= lastWeek wOps then
+                yr + 1
+            else
+                yr
+    in
+        case ops.weekOps of
+            Just wOps ->
+                Just (calcYear wOps)
+
+            Nothing ->
+                Nothing
