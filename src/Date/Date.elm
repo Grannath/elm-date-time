@@ -47,10 +47,10 @@ applies to offsets.
 @docs Period, period, add, daysBetween, isBefore, isAfter
 
 # Gregorian calendar
-@docs gregorian
+@docs Gregorian, gregorian
 
 # Extension
-@docs DateOps, WeekOps, CompOps, Gregorian, isoWeekOps
+@docs DateOps, WeekOps, CompOps, isoWeekOps
 -}
 
 import Date.Gregorian as GregorianDate
