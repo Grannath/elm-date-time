@@ -1,5 +1,6 @@
 module TestGregorian exposing (..)
 
+import TestUtils exposing (..)
 import Expect exposing (Expectation)
 import Fuzz exposing (int, intRange, Fuzzer)
 import Test exposing (..)
@@ -411,12 +412,6 @@ monthDays year month =
 fuzzDate : String -> (Int -> Int -> Int -> Expectation) -> Test
 fuzzDate =
     fuzz3 int (intRange 1 12) (intRange 1 31)
-
-
-testAll : List a -> String -> (a -> Expectation) -> Test
-testAll list mes exp =
-    Test.concat <|
-        List.map (test mes << always << exp) list
 
 
 yearMonthDayFuzzer : Fuzzer ( Int, Int, Int )
